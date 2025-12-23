@@ -633,7 +633,7 @@ zumba_advanced_manager := class(creative_device):
                     Recarregar()
 
     MoverProjetil(Bala : creative_prop, CorDaBala : int)<suspends>:void=
-        var TempoMax : float = 3.0
+        var TempoMax : float = 1.5 # Reduzido para 1.5s para evitar que atravesse fases
         Passo := 0.0
         loop:
             Sleep(Passo)
