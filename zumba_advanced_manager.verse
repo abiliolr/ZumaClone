@@ -406,28 +406,19 @@ zumba_advanced_manager := class(creative_device):
                             if (I < 0) { break }
 
                             if (BolaFrente := Cobra[I], BolaTras := Cobra[I+1]):
-                                DistMinima := DiametroDaBola
-                                DistAtual := BolaFrente.DistanciaNaTrilha - BolaTras.DistanciaNaTrilha
+                                Alvo := BolaFrente.DistanciaNaTrilha - DiametroDaBola
+                                Diferenca := Alvo - BolaTras.DistanciaNaTrilha
 
-                                # Tolerancia de seguranca para evitar quebra da cobra (35.0 = ~2 frames de movimento a 600u/s)
-                                if (DistAtual <= DistMinima + 35.0):
-                                    set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DistMinima
+                                if (Diferenca <= 5.0):
+                                    set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DiametroDaBola
                                 else:
-                                    # Gap: Se cores iguais, puxa a FRENTE para tras (Retracao)
-                                    var MoveuFrente : logic = false
-                                    if (BolaFrente.Cor = BolaTras.Cor and not ModoIntro?):
-                                        VelocidadeAtracao := VelocidadeDeRetorno
-                                        set BolaFrente.DistanciaNaTrilha -= VelocidadeAtracao * Passo
-                                        set MoveuFrente = true
+                                    VelocidadeIma := VelocidadeBase + VelocidadeDeRetorno
+                                    set BolaTras.DistanciaNaTrilha += VelocidadeIma * Passo
 
-                                        # Verifica se fechou o gap
-                                        NovaDist := BolaFrente.DistanciaNaTrilha - BolaTras.DistanciaNaTrilha
-                                        if (NovaDist <= DistMinima):
-                                            set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DistMinima
-                                            if (not ProcessandoExplosao?):
-                                                spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor) }
-
-                                    # Se nao houver atracao, BolaFrente mantem sua posicao (nao avanca sozinha)
+                                    if (BolaTras.DistanciaNaTrilha >= Alvo - 2.0):
+                                        set BolaTras.DistanciaNaTrilha = Alvo
+                                        if (not ModoIntro?):
+                                            if (BolaFrente.Cor = BolaTras.Cor and not ProcessandoExplosao?) { spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor) } }
 
                             set I -= 1
 
@@ -617,7 +608,7 @@ zumba_advanced_manager := class(creative_device):
                     Recarregar()
 
     MoverProjetil(Bala : creative_prop, CorDaBala : int)<suspends>:void=
-        var TempoMax : float = 1.5
+        var TempoMax : float = 3.0
         Passo := 0.0
         loop:
             Sleep(Passo)
