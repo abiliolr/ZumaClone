@@ -54,6 +54,9 @@ zumba_advanced_manager := class(creative_device):
     @editable SomDisparo : audio_player_device = audio_player_device{}
     @editable SomImpacto : audio_player_device = audio_player_device{}
     @editable SomExplosao : audio_player_device = audio_player_device{}
+    # Array de sons para combos progressivos (ex: Pitch 1.0, 1.2, 1.4...)
+    @editable SonsCombo : []audio_player_device = array{}
+
     @editable SomExplosaoBomba : audio_player_device = audio_player_device{}
     @editable SomAtivarSlow : audio_player_device = audio_player_device{}
     @editable SomAtivarReverso : audio_player_device = audio_player_device{}
@@ -110,6 +113,9 @@ zumba_advanced_manager := class(creative_device):
 
     var TempoRestanteSlow : float = 0.0
     var TempoRestanteReverso : float = 0.0
+
+    # Sistema de Combo
+    var NivelDoCombo : int = 0
 
     # Textos de UI
     TextoTitulo<localizes> : message = "ZUMA GAME"
@@ -288,6 +294,7 @@ zumba_advanced_manager := class(creative_device):
             set Cobra = array{}
             set TempoRestanteSlow = 0.0
             set TempoRestanteReverso = 0.0
+            set NivelDoCombo = 0
 
             set ModoIntro = true
 
@@ -443,7 +450,8 @@ zumba_advanced_manager := class(creative_device):
                                 # DETECÇÃO DE COMBO POR ATRAÇÃO:
                                 # Se a bola da frente estava recuando (Atração) e bateu na de trás, verificar combo.
                                 if (VelocidadeFrente < -1.0 and not ProcessandoExplosao?):
-                                     spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor) }
+                                     # É um combo automático (cadeia)
+                                     spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor, true) }
 
                                 # Ao colidir, assume a velocidade de trás para o próximo frame (ou propagação)
                                 set VelocidadeFrente = VelocidadeTras
@@ -684,16 +692,20 @@ zumba_advanced_manager := class(creative_device):
             if (Item := Cobra[I]):
                 set NovaCobra += array{Item}
         set Cobra = NovaCobra
-        spawn{ VerificarEExplodirSeguro(IndexInsercao, Cor) }
+        spawn{ VerificarEExplodirSeguro(IndexInsercao, Cor, false) }
 
-    VerificarEExplodirSeguro(Indice : int, Cor : int)<suspends>:void=
+    VerificarEExplodirSeguro(Indice : int, Cor : int, EhAutomatico : logic)<suspends>:void=
         Sleep(0.0)
-        VerificarEExplodir(Indice, Cor)
+        VerificarEExplodir(Indice, Cor, EhAutomatico)
 
-    VerificarEExplodir(IndiceAtingido : int, CorDoTiro : int):void=
+    VerificarEExplodir(IndiceAtingido : int, CorDoTiro : int, EhAutomatico : logic):void=
         if (ProcessandoExplosao?):
             return
         set ProcessandoExplosao = true
+
+        # Reset ou Incremento do Combo
+        if (not EhAutomatico?):
+            set NivelDoCombo = 0
 
         if (IndiceAtingido < 0 or IndiceAtingido >= Cobra.Length):
             set ProcessandoExplosao = false
@@ -750,6 +762,14 @@ zumba_advanced_manager := class(creative_device):
         if (Contagem >= 3):
             Print("COMBO! {Contagem} bolas.")
 
+            if (EhAutomatico?):
+                set NivelDoCombo += 1
+                Print("CHAIN REACTION! Level {NivelDoCombo}")
+
+            # XP Placeholder
+            XP := (Contagem * 10) + (NivelDoCombo * 50)
+            Print("Ganhou {XP} XP!")
+
             var TemBomba : logic = false
             var TemSlow : logic = false
             var TemReverso : logic = false
@@ -790,7 +810,18 @@ zumba_advanced_manager := class(creative_device):
 
             if (not TemBomba?):
                 if (P := GetPlayspace().GetPlayers()[0]):
-                    SomExplosao.Play(P)
+                    # Lógica de som progressivo
+                    var SomTocado : logic = false
+                    if (EhAutomatico? and SonsCombo.Length > 0):
+                        IdxSom := NivelDoCombo - 1
+                        if (IdxSom >= SonsCombo.Length):
+                             set IdxSom = SonsCombo.Length - 1
+                        if (SomExtra := SonsCombo[IdxSom]):
+                            SomExtra.Play(P)
+                            set SomTocado = true
+
+                    if (not SomTocado?):
+                        SomExplosao.Play(P)
 
             for (Indice : IndicesParaDestruir):
                 if (BolaParaMorrer := Cobra[Indice]):
