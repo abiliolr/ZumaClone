@@ -54,6 +54,9 @@ zumba_advanced_manager := class(creative_device):
     @editable SomDisparo : audio_player_device = audio_player_device{}
     @editable SomImpacto : audio_player_device = audio_player_device{}
     @editable SomExplosao : audio_player_device = audio_player_device{}
+    # Array de sons para combos progressivos (ex: Pitch 1.0, 1.2, 1.4...)
+    @editable SonsCombo : []audio_player_device = array{}
+
     @editable SomExplosaoBomba : audio_player_device = audio_player_device{}
     @editable SomAtivarSlow : audio_player_device = audio_player_device{}
     @editable SomAtivarReverso : audio_player_device = audio_player_device{}
@@ -66,7 +69,7 @@ zumba_advanced_manager := class(creative_device):
     @editable RaioDeColisao : float = 280.0
 
     @editable VelocidadeDaCobra : float = 150.0
-    @editable VelocidadeDeRetorno : float = 600.0
+    @editable VelocidadeDeRetorno : float = 3000.0 # Aumentado para 3000 (aprox 300ms para fechar gap de 3 bolas)
     @editable NumeroInicialDeBolas : int = 15
 
     @editable DistanciaDePerigo : float = 2000.0
@@ -81,6 +84,10 @@ zumba_advanced_manager := class(creative_device):
     @editable GatilhoDeTiro : input_trigger_device = input_trigger_device{}
     @editable DispositivoFimDeJogo : end_game_device = end_game_device{}
     @editable DispositivoVitoria : end_game_device = end_game_device{}
+
+    # Dispositivos de Accolades para XP Progressivo
+    # Index 0 = Normal, Index 1 = Combo 1, Index 2 = Combo 2, etc.
+    @editable ListaDeXP : []accolades_device = array{}
 
     @editable VelocidadeDoTiro : float = 1500.0
 
@@ -110,6 +117,9 @@ zumba_advanced_manager := class(creative_device):
 
     var TempoRestanteSlow : float = 0.0
     var TempoRestanteReverso : float = 0.0
+
+    # Sistema de Combo
+    var NivelDoCombo : int = 0
 
     # Textos de UI
     TextoTitulo<localizes> : message = "ZUMA GAME"
@@ -288,6 +298,7 @@ zumba_advanced_manager := class(creative_device):
             set Cobra = array{}
             set TempoRestanteSlow = 0.0
             set TempoRestanteReverso = 0.0
+            set NivelDoCombo = 0
 
             set ModoIntro = true
 
@@ -376,72 +387,86 @@ zumba_advanced_manager := class(creative_device):
             if (JogoRodando = false):
                 Sleep(0.1)
             else:
-                var VelocidadeBase : float = VelocidadeAtualFase
+                # 1. Determinar Velocidade da Cauda (Engine)
+                var VelocidadeCauda : float = VelocidadeAtualFase
 
                 if (ModoIntro?):
-                    set VelocidadeBase = VelocidadeIntro
+                    set VelocidadeCauda = VelocidadeIntro
                 else:
                     if (TempoRestanteReverso > 0.0):
-                        set VelocidadeBase = -VelocidadeReverso
+                        set VelocidadeCauda = -VelocidadeReverso
                         set TempoRestanteReverso -= Passo
                     else if (TempoRestanteSlow > 0.0):
-                        set VelocidadeBase = VelocidadeAtualFase * ForcaDoSlowMotion
+                        set VelocidadeCauda = VelocidadeAtualFase * ForcaDoSlowMotion
                         set TempoRestanteSlow -= Passo
                     else:
                         if (Cobra.Length > 0, C := Cobra[0]):
                             DistRestante := ComprimentoTotalTrilha - C.DistanciaNaTrilha
                             if (DistRestante < DistanciaDePerigo):
-                                set VelocidadeBase = VelocidadeAtualFase * MultiplicadorLentidao
+                                set VelocidadeCauda = VelocidadeAtualFase * MultiplicadorLentidao
 
-                # --- APLICA MOVIMENTO ---
                 if (Cobra.Length > 0):
+                    # 2. Mover a Cauda (Último elemento do array, que empurra o resto)
+                    UltimoIdx := Cobra.Length - 1
+                    if (UltimaBola := Cobra[UltimoIdx]):
+                        set UltimaBola.DistanciaNaTrilha += VelocidadeCauda * Passo
 
-                    if (VelocidadeBase >= 0.0):
-                        UltimoIdx := Cobra.Length - 1
-                        if (UltimaBola := Cobra[UltimoIdx]):
-                            set UltimaBola.DistanciaNaTrilha += VelocidadeBase * Passo
+                    # 3. Propagar movimento da Cauda para a Cabeça (Trás para Frente)
+                    # Isso permite gaps, conexões e atração (recuo)
+                    var VelocidadeTras : float = VelocidadeCauda
 
-                        var I : int = UltimoIdx - 1
-                        loop:
-                            if (I < 0) { break }
+                    var I : int = UltimoIdx - 1
+                    loop:
+                        if (I < 0) { break }
 
-                            if (BolaFrente := Cobra[I], BolaTras := Cobra[I+1]):
-                                Alvo := BolaFrente.DistanciaNaTrilha - DiametroDaBola
-                                Diferenca := Alvo - BolaTras.DistanciaNaTrilha
+                        if (BolaFrente := Cobra[I], BolaTras := Cobra[I+1]):
+                            # Verifica distância atual (Nota: BolaTras já se moveu neste frame)
+                            DistAtual := BolaFrente.DistanciaNaTrilha - BolaTras.DistanciaNaTrilha
+                            var VelocidadeFrente : float = 0.0
 
-                                if (Diferenca <= 5.0):
-                                    set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DiametroDaBola
+                            # Se estão conectados (ou muito perto), BolaFrente herda a velocidade de quem empurra
+                            # Adicionamos tolerância de 5.0 para manter coesão
+                            if (DistAtual <= DiametroDaBola + 5.0):
+                                set VelocidadeFrente = VelocidadeTras
+                            else:
+                                # Existe um Gap. Verificar Atração (Match de Cores) ou Reverso
+                                # Lógica Melhorada: Se houver match, atrai (-Retorno).
+                                # Se não houver match mas o segmento de trás estiver recuando (Powerup Reverso),
+                                # o segmento da frente deve acompanhar para manter a formação (arrasto).
+
+                                if (BolaFrente.Cor = BolaTras.Cor and not ModoIntro?):
+                                    set VelocidadeFrente = -VelocidadeDeRetorno
+                                else if (VelocidadeTras < 0.0):
+                                    set VelocidadeFrente = VelocidadeTras # Arrasta para trás junto com o Reverso
                                 else:
-                                    VelocidadeIma := VelocidadeBase + VelocidadeDeRetorno
-                                    set BolaTras.DistanciaNaTrilha += VelocidadeIma * Passo
+                                    # Sem match e sem reverso, a bola da frente para
+                                    set VelocidadeFrente = 0.0
 
-                                    if (BolaTras.DistanciaNaTrilha >= Alvo - 2.0):
-                                        set BolaTras.DistanciaNaTrilha = Alvo
-                                        if (not ModoIntro?):
-                                            if (BolaFrente.Cor = BolaTras.Cor and not ProcessandoExplosao?) { spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor) } }
+                            # Aplica o movimento
+                            set BolaFrente.DistanciaNaTrilha += VelocidadeFrente * Passo
 
-                            set I -= 1
+                            # 4. Resolver Colisões (Fechar Gaps e Snapping)
+                            NovaDist := BolaFrente.DistanciaNaTrilha - BolaTras.DistanciaNaTrilha
+                            if (NovaDist < DiametroDaBola):
+                                # Colisão: Snap na posição correta
+                                set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DiametroDaBola
 
-                    else:
-                        # MODO REVERSO
-                        if (Cabeca := Cobra[0]):
-                            set Cabeca.DistanciaNaTrilha += VelocidadeBase * Passo
-                            if (Cabeca.DistanciaNaTrilha < 0.0) { set Cabeca.DistanciaNaTrilha = 0.0 }
+                                # DETECÇÃO DE COMBO POR ATRAÇÃO:
+                                # Se a bola da frente estava recuando (Atração) e bateu na de trás, verificar combo.
+                                if (VelocidadeFrente < -1.0 and not ProcessandoExplosao?):
+                                     # É um combo automático (cadeia)
+                                     # FIX: Captura de variavel para spawn
+                                     IndiceCapturado := I
+                                     spawn{ VerificarEExplodirSeguro(IndiceCapturado, BolaFrente.Cor, true) }
 
-                        for (K := 1..Cobra.Length - 1):
-                            if (B_Frente := Cobra[K-1], B_Tras := Cobra[K]):
-                                Alvo := B_Frente.DistanciaNaTrilha - DiametroDaBola
-                                if (B_Tras.DistanciaNaTrilha > Alvo):
-                                    set B_Tras.DistanciaNaTrilha = Alvo
+                                # Ao colidir, assume a velocidade de trás para o próximo frame (ou propagação)
+                                set VelocidadeFrente = VelocidadeTras
 
-                    # --- SEGURANÇA FÍSICA: ANTI-SOBREPOSIÇÃO ---
-                    for (IdxFix := 0..Cobra.Length - 2):
-                        if (Frente := Cobra[IdxFix], Tras := Cobra[IdxFix+1]):
-                            DistMinima := DiametroDaBola
-                            DistAtual := Frente.DistanciaNaTrilha - Tras.DistanciaNaTrilha
-                            if (DistAtual < DistMinima):
-                                set Tras.DistanciaNaTrilha = Frente.DistanciaNaTrilha - DistMinima
+                            set VelocidadeTras = VelocidadeFrente
 
+                        set I -= 1
+
+                    # --- GAME OVER E VISUAL ---
                     if (Cabeca := Cobra[0]):
                         if (Cabeca.DistanciaNaTrilha >= ComprimentoTotalTrilha):
                             AtivarGameOver()
@@ -673,16 +698,20 @@ zumba_advanced_manager := class(creative_device):
             if (Item := Cobra[I]):
                 set NovaCobra += array{Item}
         set Cobra = NovaCobra
-        spawn{ VerificarEExplodirSeguro(IndexInsercao, Cor) }
+        spawn{ VerificarEExplodirSeguro(IndexInsercao, Cor, false) }
 
-    VerificarEExplodirSeguro(Indice : int, Cor : int)<suspends>:void=
+    VerificarEExplodirSeguro(Indice : int, Cor : int, EhAutomatico : logic)<suspends>:void=
         Sleep(0.0)
-        VerificarEExplodir(Indice, Cor)
+        VerificarEExplodir(Indice, Cor, EhAutomatico)
 
-    VerificarEExplodir(IndiceAtingido : int, CorDoTiro : int):void=
+    VerificarEExplodir(IndiceAtingido : int, CorDoTiro : int, EhAutomatico : logic):void=
         if (ProcessandoExplosao?):
             return
         set ProcessandoExplosao = true
+
+        # Reset ou Incremento do Combo
+        if (not EhAutomatico?):
+            set NivelDoCombo = 0
 
         if (IndiceAtingido < 0 or IndiceAtingido >= Cobra.Length):
             set ProcessandoExplosao = false
@@ -739,6 +768,19 @@ zumba_advanced_manager := class(creative_device):
         if (Contagem >= 3):
             Print("COMBO! {Contagem} bolas.")
 
+            if (EhAutomatico?):
+                set NivelDoCombo += 1
+                Print("CHAIN REACTION! Level {NivelDoCombo}")
+
+            # XP via Lista de Accolades (Progressivo)
+            if (P := GetPlayspace().GetPlayers()[0]):
+                 var IndexXP : int = NivelDoCombo
+                 if (ListaDeXP.Length > 0):
+                     if (IndexXP >= ListaDeXP.Length):
+                         set IndexXP = ListaDeXP.Length - 1
+                     if (DispositivoCorreto := ListaDeXP[IndexXP]):
+                         DispositivoCorreto.Award(P)
+
             var TemBomba : logic = false
             var TemSlow : logic = false
             var TemReverso : logic = false
@@ -779,7 +821,18 @@ zumba_advanced_manager := class(creative_device):
 
             if (not TemBomba?):
                 if (P := GetPlayspace().GetPlayers()[0]):
-                    SomExplosao.Play(P)
+                    # Lógica de som progressivo
+                    var SomTocado : logic = false
+                    if (EhAutomatico? and SonsCombo.Length > 0):
+                        var IdxSom : int = NivelDoCombo - 1
+                        if (IdxSom >= SonsCombo.Length):
+                             set IdxSom = SonsCombo.Length - 1
+                        if (SomExtra := SonsCombo[IdxSom]):
+                            SomExtra.Play(P)
+                            set SomTocado = true
+
+                    if (not SomTocado?):
+                        SomExplosao.Play(P)
 
             for (Indice : IndicesParaDestruir):
                 if (BolaParaMorrer := Cobra[Indice]):
