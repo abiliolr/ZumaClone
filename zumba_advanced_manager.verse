@@ -455,7 +455,9 @@ zumba_advanced_manager := class(creative_device):
                                 # Se a bola da frente estava recuando (Atração) e bateu na de trás, verificar combo.
                                 if (VelocidadeFrente < -1.0 and not ProcessandoExplosao?):
                                      # É um combo automático (cadeia)
-                                     spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor, true) }
+                                     # FIX: Captura de variavel para spawn
+                                     IndiceCapturado := I
+                                     spawn{ VerificarEExplodirSeguro(IndiceCapturado, BolaFrente.Cor, true) }
 
                                 # Ao colidir, assume a velocidade de trás para o próximo frame (ou propagação)
                                 set VelocidadeFrente = VelocidadeTras
