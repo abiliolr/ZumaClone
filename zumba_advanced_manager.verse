@@ -66,7 +66,7 @@ zumba_advanced_manager := class(creative_device):
     @editable RaioDeColisao : float = 280.0
 
     @editable VelocidadeDaCobra : float = 150.0
-    @editable VelocidadeDeRetorno : float = 600.0
+    @editable VelocidadeDeRetorno : float = 3000.0 # Aumentado para 3000 (aprox 300ms para fechar gap de 3 bolas)
     @editable NumeroInicialDeBolas : int = 15
 
     @editable DistanciaDePerigo : float = 2000.0
