@@ -409,12 +409,11 @@ zumba_advanced_manager := class(creative_device):
                                 DistMinima := DiametroDaBola
                                 DistAtual := BolaFrente.DistanciaNaTrilha - BolaTras.DistanciaNaTrilha
 
-                                # Aumentamos a tolerância para 35.0 para compensar o movimento rápido de recuo (VelocidadeDeRetorno)
+                                # Tolerancia de seguranca para evitar quebra da cobra (35.0 = ~2 frames de movimento a 600u/s)
                                 if (DistAtual <= DistMinima + 35.0):
-                                    # Conectado: Empurra a frente
                                     set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DistMinima
                                 else:
-                                    # Gap: Verifica atração
+                                    # Gap: Se cores iguais, puxa a FRENTE para tras (Retracao)
                                     var MoveuFrente : logic = false
                                     if (BolaFrente.Cor = BolaTras.Cor and not ModoIntro?):
                                         VelocidadeAtracao := VelocidadeDeRetorno
@@ -428,7 +427,7 @@ zumba_advanced_manager := class(creative_device):
                                             if (not ProcessandoExplosao?):
                                                 spawn{ VerificarEExplodirSeguro(I, BolaFrente.Cor) }
 
-                                    # Se não houve atração, BolaFrente fica parada (ou segue inércia 0)
+                                    # Se nao houver atracao, BolaFrente mantem sua posicao (nao avanca sozinha)
 
                             set I -= 1
 
