@@ -118,8 +118,9 @@ zumba_advanced_manager := class(creative_device):
     var TempoRestanteSlow : float = 0.0
     var TempoRestanteReverso : float = 0.0
 
-    # Sistema de Combo
+    # Sistema de Combo e Fisica
     var NivelDoCombo : int = 0
+    var IndicesParaVerificar : []int = array{}
 
     # Textos de UI
     TextoTitulo<localizes> : message = "ZUMA GAME"
@@ -299,6 +300,7 @@ zumba_advanced_manager := class(creative_device):
             set TempoRestanteSlow = 0.0
             set TempoRestanteReverso = 0.0
             set NivelDoCombo = 0
+            set IndicesParaVerificar = array{}
 
             set ModoIntro = true
 
@@ -430,16 +432,11 @@ zumba_advanced_manager := class(creative_device):
                                 set VelocidadeFrente = VelocidadeTras
                             else:
                                 # Existe um Gap. Verificar Atração (Match de Cores) ou Reverso
-                                # Lógica Melhorada: Se houver match, atrai (-Retorno).
-                                # Se não houver match mas o segmento de trás estiver recuando (Powerup Reverso),
-                                # o segmento da frente deve acompanhar para manter a formação (arrasto).
-
                                 if (BolaFrente.Cor = BolaTras.Cor and not ModoIntro?):
                                     set VelocidadeFrente = -VelocidadeDeRetorno
                                 else if (VelocidadeTras < 0.0):
                                     set VelocidadeFrente = VelocidadeTras # Arrasta para trás junto com o Reverso
                                 else:
-                                    # Sem match e sem reverso, a bola da frente para
                                     set VelocidadeFrente = 0.0
 
                             # Aplica o movimento
@@ -452,12 +449,10 @@ zumba_advanced_manager := class(creative_device):
                                 set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DiametroDaBola
 
                                 # DETECÇÃO DE COMBO POR ATRAÇÃO:
-                                # Se a bola da frente estava recuando (Atração) e bateu na de trás, verificar combo.
+                                # Se a bola da frente estava recuando (Atração) e bateu na de trás
                                 if (VelocidadeFrente < -1.0 and not ProcessandoExplosao?):
-                                     # É um combo automático (cadeia)
-                                     # FIX: Captura de variavel para spawn
-                                     IndiceCapturado := I
-                                     spawn{ VerificarEExplodirSeguro(IndiceCapturado, BolaFrente.Cor, true) }
+                                     # Adiciona o índice para verificação SINCRONA após o loop de física
+                                     set IndicesParaVerificar += array{I}
 
                                 # Ao colidir, assume a velocidade de trás para o próximo frame (ou propagação)
                                 set VelocidadeFrente = VelocidadeTras
@@ -465,6 +460,13 @@ zumba_advanced_manager := class(creative_device):
                             set VelocidadeTras = VelocidadeFrente
 
                         set I -= 1
+
+                    # --- PROCESSAR COMBOS (Sincrono, fim do frame) ---
+                    for (IdxVerificar : IndicesParaVerificar):
+                        if (not ProcessandoExplosao?):
+                            if (BolaCheck := Cobra[IdxVerificar]):
+                                VerificarEExplodir(IdxVerificar, BolaCheck.Cor, true)
+                    set IndicesParaVerificar = array{}
 
                     # --- GAME OVER E VISUAL ---
                     if (Cabeca := Cobra[0]):
