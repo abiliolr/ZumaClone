@@ -85,8 +85,9 @@ zumba_advanced_manager := class(creative_device):
     @editable DispositivoFimDeJogo : end_game_device = end_game_device{}
     @editable DispositivoVitoria : end_game_device = end_game_device{}
 
-    # Dispositivo de Accolades para XP (Requer UEFN XP ativado na ilha)
-    @editable DispositivoXP : accolades_device = accolades_device{}
+    # Dispositivos de Accolades para XP Progressivo
+    # Index 0 = Normal, Index 1 = Combo 1, Index 2 = Combo 2, etc.
+    @editable ListaDeXP : []accolades_device = array{}
 
     @editable VelocidadeDoTiro : float = 1500.0
 
@@ -769,9 +770,14 @@ zumba_advanced_manager := class(creative_device):
                 set NivelDoCombo += 1
                 Print("CHAIN REACTION! Level {NivelDoCombo}")
 
-            # XP via Accolades Device
+            # XP via Lista de Accolades (Progressivo)
             if (P := GetPlayspace().GetPlayers()[0]):
-                 DispositivoXP.Award(P)
+                 var IndexXP : int = NivelDoCombo
+                 if (ListaDeXP.Length > 0):
+                     if (IndexXP >= ListaDeXP.Length):
+                         set IndexXP = ListaDeXP.Length - 1
+                     if (DispositivoCorreto := ListaDeXP[IndexXP]):
+                         DispositivoCorreto.Award(P)
 
             var TemBomba : logic = false
             var TemSlow : logic = false
