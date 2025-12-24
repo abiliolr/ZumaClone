@@ -452,8 +452,12 @@ zumba_advanced_manager := class(creative_device):
                                 set BolaFrente.DistanciaNaTrilha = BolaTras.DistanciaNaTrilha + DiametroDaBola
 
                                 # DETECÇÃO DE COMBO POR ATRAÇÃO:
-                                # Se a bola da frente estava recuando (Atração) e bateu na de trás, verificar combo.
-                                if (VelocidadeFrente < -1.0 and not ProcessandoExplosao?):
+                                # A logica anterior só funcionava se a bola da frente estivesse se movendo ativamente.
+                                # Mas se ela estava parada e foi puxada, VelocidadeFrente é negativo.
+                                # Porem, se a cadeia "parou" e depois voltou, precisamos garantir o check.
+                                # Se houve colisão (fechamento de gap) E as cores são iguais, devemos verificar combo.
+
+                                if (BolaFrente.Cor = BolaTras.Cor and not ProcessandoExplosao? and not ModoIntro?):
                                      # É um combo automático (cadeia)
                                      # FIX: Captura de variavel para spawn
                                      IndiceCapturado := I
