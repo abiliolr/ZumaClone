@@ -702,13 +702,13 @@ zumba_advanced_manager := class(creative_device):
             if (Item := Cobra[I]):
                 set NovaCobra += array{Item}
         set Cobra = NovaCobra
-        spawn{ VerificarEExplodirSeguro(IndexInsercao, Cor, false) }
+        spawn{ VerificarEExplodirSeguro(ContadorDeIds, Cor, false) }
 
-    VerificarEExplodirSeguro(Indice : int, Cor : int, EhAutomatico : logic)<suspends>:void=
+    VerificarEExplodirSeguro(ID_Bola : int, Cor : int, EhAutomatico : logic)<suspends>:void=
         Sleep(0.0)
-        VerificarEExplodir(Indice, Cor, EhAutomatico)
+        VerificarEExplodir(ID_Bola, Cor, EhAutomatico)
 
-    VerificarEExplodir(IndiceAtingido : int, CorDoTiro : int, EhAutomatico : logic):void=
+    VerificarEExplodir(ID_Alvo : int, CorDoTiro : int, EhAutomatico : logic):void=
         if (ProcessandoExplosao?):
             return
         set ProcessandoExplosao = true
@@ -717,7 +717,14 @@ zumba_advanced_manager := class(creative_device):
         if (not EhAutomatico?):
             set NivelDoCombo = 0
 
-        if (IndiceAtingido < 0 or IndiceAtingido >= Cobra.Length):
+        # Encontrar o índice atual da bola pelo ID
+        var IndiceAtingido : int = -1
+        for (K := 0..Cobra.Length - 1):
+            if (B := Cobra[K]):
+                if (B.Id = ID_Alvo):
+                    set IndiceAtingido = K
+
+        if (IndiceAtingido = -1):
             set ProcessandoExplosao = false
             return
 
