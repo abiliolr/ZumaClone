@@ -40,6 +40,11 @@ zumba_advanced_manager := class(creative_device):
     @editable ModelosSlow : []creative_prop_asset = array{}
     @editable ModelosReverso : []creative_prop_asset = array{}
 
+    # Skins para a Seta/Canhão
+    @editable ModelosSeta : []creative_prop_asset = array{}
+    @editable PrecosSkins : []int = array{0, 1000, 2500, 5000} # Exemplo de precos
+    @editable NomesSkins : []string = array{"Padrão", "Sapo Dourado", "Laser Tech", "Místico"}
+
     @editable ModeloExplosao : creative_prop_asset = DefaultCreativePropAsset
 
     # --- CONFIGURAÇÃO DOS POWER-UPS ---
@@ -98,6 +103,7 @@ zumba_advanced_manager := class(creative_device):
 
     var ContadorDeIds : int = 0
     var BolaNaBoca : ?creative_prop = false
+    var PropSetaVisual : ?creative_prop = false # Prop visual da skin
     var IndiceDaCorAtual : int = 0
 
     var JogoRodando : logic = false
@@ -121,9 +127,16 @@ zumba_advanced_manager := class(creative_device):
     # Sistema de Combo
     var NivelDoCombo : int = 0
 
+    # Economia e Loja
+    var PontosDoJogador : int = 0
+    var SkinsDesbloqueadas : []int = array{0} # Começa com a skin 0 (padrao)
+    var SkinEquipada : int = 0
+
     # Textos de UI
     TextoTitulo<localizes> : message = "ZUMA GAME"
     TextoInstrucao<localizes> : message = "ATIRE PARA INICIAR"
+    TextoBotaoLoja<localizes> : message = "LOJA DE SKINS"
+    TextoMoedas<localizes>(Qtd:int) : message = "MOEDAS: {Qtd}"
 
     TextoGameOver<localizes> : message = "GAME OVER"
     TextoVitoriaTitulo<localizes> : message = "VOCÊ VENCEU!"
@@ -164,24 +177,56 @@ zumba_advanced_manager := class(creative_device):
         if (Player := GetPlayspace().GetPlayers()[0]):
             Titulo := text_block{DefaultText := TextoTitulo, DefaultTextColor := NamedColors.Yellow, DefaultJustification := text_justification.Center}
             Instrucao := text_block{DefaultText := TextoInstrucao, DefaultTextColor := NamedColors.White, DefaultJustification := text_justification.Center}
+            MoedasHUD := text_block{DefaultText := TextoMoedas(PontosDoJogador), DefaultTextColor := NamedColors.Gold, DefaultJustification := text_justification.Right}
 
             BotaoStart := button_loud{ DefaultText := TextoInstrucao }
             BotaoStart.OnClick().Subscribe(AoClicarBotaoUI)
 
+            BotaoLoja := button_loud{ DefaultText := TextoBotaoLoja }
+            BotaoLoja.OnClick().Subscribe(AoClicarBotaoLoja)
+
             TelaMenu := canvas:
                 Slots := array:
                     canvas_slot:
-                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.4}, Maximum := vector2{X:=0.5, Y:=0.4}}
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.3}, Maximum := vector2{X:=0.5, Y:=0.3}}
                         Alignment := vector2{X:=0.5, Y:=0.5}
                         Widget := Titulo
                     canvas_slot:
-                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.6}, Maximum := vector2{X:=0.5, Y:=0.6}}
+                        Anchors := anchors{Minimum := vector2{X:=0.9, Y:=0.1}, Maximum := vector2{X:=0.9, Y:=0.1}}
+                        Alignment := vector2{X:=1.0, Y:=0.5}
+                        Widget := MoedasHUD
+                    canvas_slot:
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.5}, Maximum := vector2{X:=0.5, Y:=0.5}}
                         Alignment := vector2{X:=0.5, Y:=0.5}
                         Widget := BotaoStart
+                    canvas_slot:
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.7}, Maximum := vector2{X:=0.5, Y:=0.7}}
+                        Alignment := vector2{X:=0.5, Y:=0.5}
+                        Widget := BotaoLoja
 
             if (PlayerUI := GetPlayerUI[Player]):
                 PlayerUI.AddWidget(TelaMenu)
                 set MenuAberto = option{TelaMenu}
+
+    # Variável para o HUD de gameplay
+    var CanvasHUDGameplay : ?canvas = false
+    var TextoMoedasGameplay : text_block = text_block{}
+
+    CriarHUDGameplay(Player : player):void=
+        set TextoMoedasGameplay = text_block{DefaultText := TextoMoedas(PontosDoJogador), DefaultTextColor := NamedColors.Gold, DefaultJustification := text_justification.Right}
+        NovoHUD := canvas:
+            Slots := array:
+                canvas_slot:
+                    Anchors := anchors{Minimum := vector2{X:=0.9, Y:=0.1}, Maximum := vector2{X:=0.9, Y:=0.1}}
+                    Alignment := vector2{X:=1.0, Y:=0.5}
+                    Widget := TextoMoedasGameplay
+
+        if (PlayerUI := GetPlayerUI[Player]):
+            PlayerUI.AddWidget(NovoHUD)
+            set CanvasHUDGameplay = option{NovoHUD}
+
+    AtualizarHUD():void=
+        TextoMoedasGameplay.SetText(TextoMoedas(PontosDoJogador))
 
     # --- UI DE FIM DE JOGO ---
     MostrarMenuFimDeJogo(Venceu : logic):void=
@@ -205,20 +250,33 @@ zumba_advanced_manager := class(creative_device):
 
             BotaoReset.OnClick().Subscribe(AoClicarBotaoUI)
 
+            BotaoLoja := button_loud{ DefaultText := TextoBotaoLoja }
+            BotaoLoja.OnClick().Subscribe(AoClicarBotaoLoja)
+
+            MoedasHUD := text_block{DefaultText := TextoMoedas(PontosDoJogador), DefaultTextColor := NamedColors.Gold, DefaultJustification := text_justification.Right}
+
             TelaFim := canvas:
                 Slots := array:
                     canvas_slot:
-                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.3}, Maximum := vector2{X:=0.5, Y:=0.3}}
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.2}, Maximum := vector2{X:=0.5, Y:=0.2}}
                         Alignment := vector2{X:=0.5, Y:=0.5}
                         Widget := Titulo
                     canvas_slot:
-                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.4}, Maximum := vector2{X:=0.5, Y:=0.4}}
+                        Anchors := anchors{Minimum := vector2{X:=0.9, Y:=0.1}, Maximum := vector2{X:=0.9, Y:=0.1}}
+                        Alignment := vector2{X:=1.0, Y:=0.5}
+                        Widget := MoedasHUD
+                    canvas_slot:
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.3}, Maximum := vector2{X:=0.5, Y:=0.3}}
                         Alignment := vector2{X:=0.5, Y:=0.5}
                         Widget := Desc
                     canvas_slot:
-                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.6}, Maximum := vector2{X:=0.5, Y:=0.6}}
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.5}, Maximum := vector2{X:=0.5, Y:=0.5}}
                         Alignment := vector2{X:=0.5, Y:=0.5}
                         Widget := BotaoReset
+                    canvas_slot:
+                        Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.7}, Maximum := vector2{X:=0.5, Y:=0.7}}
+                        Alignment := vector2{X:=0.5, Y:=0.5}
+                        Widget := BotaoLoja
 
             if (PlayerUI := GetPlayerUI[Player]):
                 PlayerUI.AddWidget(TelaFim)
@@ -229,6 +287,104 @@ zumba_advanced_manager := class(creative_device):
 
     AoClicarBotaoUI(Widget : widget_message):void=
         IniciarJogo(Widget.Player)
+
+    AoClicarBotaoLoja(Widget : widget_message):void=
+        MostrarLoja(Widget.Player)
+
+    MostrarLoja(Player : player):void=
+        if (PlayerUI := GetPlayerUI[Player], MenuParaRemover := MenuAberto?):
+            PlayerUI.RemoveWidget(MenuParaRemover)
+
+        # Cria UI da Loja dinamicamente
+        var SlotsLoja : []canvas_slot = array{}
+
+        TituloLoja := text_block{DefaultText := TextoBotaoLoja, DefaultTextColor := NamedColors.White, DefaultJustification := text_justification.Center}
+        SlotsLoja += array{ canvas_slot{Anchors := anchors{Minimum := vector2{X:=0.5, Y:=0.1}, Maximum := vector2{X:=0.5, Y:=0.1}}, Alignment := vector2{X:=0.5, Y:=0.5}, Widget := TituloLoja} }
+
+        MoedasHUD := text_block{DefaultText := TextoMoedas(PontosDoJogador), DefaultTextColor := NamedColors.Gold, DefaultJustification := text_justification.Right}
+        SlotsLoja += array{ canvas_slot{Anchors := anchors{Minimum := vector2{X:=0.9, Y:=0.1}, Maximum := vector2{X:=0.9, Y:=0.1}}, Alignment := vector2{X:=1.0, Y:=0.5}, Widget := MoedasHUD} }
+
+        BotaoVoltar := button_loud{ DefaultText := "VOLTAR" }
+        BotaoVoltar.OnClick().Subscribe(AoClicarVoltarLoja)
+        SlotsLoja += array{ canvas_slot{Anchors := anchors{Minimum := vector2{X:=0.1, Y:=0.1}, Maximum := vector2{X:=0.1, Y:=0.1}}, Alignment := vector2{X:=0.0, Y:=0.5}, Widget := BotaoVoltar} }
+
+        # Lista de Skins
+        var YPos : float = 0.3
+        for (I := 0..ModelosSeta.Length - 1):
+            if (Nome := NomesSkins[I], Preco := PrecosSkins[I]):
+                # Verifica status
+                var TextoBotao : string = "{Preco}"
+                var EhEquipado : logic = false
+                var EhComprado : logic = false
+
+                if (SkinEquipada = I):
+                    set EhEquipado = true
+                    set TextoBotao = "EQUIPADO"
+                else:
+                    for (K : SkinsDesbloqueadas):
+                        if (K = I):
+                            set EhComprado = true
+                            set TextoBotao = "EQUIPAR"
+
+                DescSkin := text_block{DefaultText := "{Nome}", DefaultTextColor := NamedColors.White}
+                BotaoAcao := button_loud{ DefaultText := TextoBotao }
+
+                # Gambiarra para passar o ID no evento (usar Interacao)
+                # Verse nao tem lambda com captura facil para UI events ainda, entao simplificamos:
+                # A loja tera apenas 4 slots fixos por enquanto ou logica customizada
+                # Para este exemplo, faremos um handler unico que tenta comprar/equipar o primeiro disponivel ou simplificado.
+                # *NOTA*: Implementação completa de loja dinâmica requer classes wrapper.
+                # Faremos Hardcoded para 4 slots para funcionar garantido.
+
+                if (I = 0):
+                    BotaoAcao.OnClick().Subscribe(AoClicarSkin0)
+                else if (I = 1):
+                    BotaoAcao.OnClick().Subscribe(AoClicarSkin1)
+                else if (I = 2):
+                    BotaoAcao.OnClick().Subscribe(AoClicarSkin2)
+                else if (I = 3):
+                    BotaoAcao.OnClick().Subscribe(AoClicarSkin3)
+
+                SlotsLoja += array{ canvas_slot{Anchors := anchors{Minimum := vector2{X:=0.4, Y:=YPos}, Maximum := vector2{X:=0.4, Y:=YPos}}, Alignment := vector2{X:=1.0, Y:=0.5}, Widget := DescSkin} }
+                SlotsLoja += array{ canvas_slot{Anchors := anchors{Minimum := vector2{X:=0.6, Y:=YPos}, Maximum := vector2{X:=0.6, Y:=YPos}}, Alignment := vector2{X:=0.0, Y:=0.5}, Widget := BotaoAcao} }
+
+                set YPos += 0.15
+
+        TelaLoja := canvas{ Slots := SlotsLoja }
+        if (PlayerUI := GetPlayerUI[Player]):
+            PlayerUI.AddWidget(TelaLoja)
+            set MenuAberto = option{TelaLoja}
+
+    AoClicarVoltarLoja(Widget : widget_message):void=
+        MostrarTelaInicial()
+
+    # Handlers Hardcoded para Skins (Verse Limitation workaround)
+    AoClicarSkin0(W : widget_message):void=
+        TentarComprarOuEquipar(W.Player, 0)
+    AoClicarSkin1(W : widget_message):void=
+        TentarComprarOuEquipar(W.Player, 1)
+    AoClicarSkin2(W : widget_message):void=
+        TentarComprarOuEquipar(W.Player, 2)
+    AoClicarSkin3(W : widget_message):void=
+        TentarComprarOuEquipar(W.Player, 3)
+
+    TentarComprarOuEquipar(Player : player, IndexSkin : int):void=
+        # Check if owned
+        var Owned : logic = false
+        for (Id : SkinsDesbloqueadas):
+            if (Id = IndexSkin):
+                set Owned = true
+
+        if (Owned?):
+            set SkinEquipada = IndexSkin
+            MostrarLoja(Player) # Refresh
+        else:
+            if (Preco := PrecosSkins[IndexSkin]):
+                if (PontosDoJogador >= Preco):
+                    set PontosDoJogador -= Preco
+                    set SkinsDesbloqueadas += array{IndexSkin}
+                    set SkinEquipada = IndexSkin
+                    MostrarLoja(Player)
 
     AoPressionarGatilho(Agente : agent):void=
         if (JogoRodando?):
@@ -244,6 +400,7 @@ zumba_advanced_manager := class(creative_device):
 
         if (P := player[Agente], FC := P.GetFortCharacter[]):
             FC.ReleaseFromStasis()
+            CriarHUDGameplay(P)
 
         CarregarFase(0)
 
@@ -485,14 +642,36 @@ zumba_advanced_manager := class(creative_device):
 
     # --- MIRA ---
     LoopDaMira()<suspends>:void=
+        var SkinAtualIndex : int = -1
+
         loop:
             Sleep(0.0)
+
+            # Verifica se a skin mudou e precisa atualizar
+            if (SkinEquipada <> SkinAtualIndex):
+                # Dispose da skin antiga se houver
+                if (OldSeta := PropSetaVisual?):
+                    OldSeta.Dispose()
+                    set PropSetaVisual = false
+
+                # Spawn da nova skin
+                if (ModeloSkin := ModelosSeta[SkinEquipada]):
+                    Res := SpawnProp(ModeloSkin, vector3{Z:=-5000.0}, rotation{})
+                    if (S := Res(0)?):
+                        set PropSetaVisual = option{S}
+                        set SkinAtualIndex = SkinEquipada
+
             if (P := GetPlayspace().GetPlayers()[0], FC := P.GetFortCharacter[]):
                 T := FC.GetTransform()
                 Rot := T.Rotation.ApplyLocalRotationZ(DegreesToRadians(GiroDaSeta)).ApplyLocalRotationY(DegreesToRadians(InclinacaoDaSeta))
                 Pos := T.Translation + OffsetDaMira
 
-                if (SetaDeMira.TeleportTo[Pos, Rot]) {}
+                # Move a skin visual em vez da SetaDeMira original (ou ambas se quiser manter a hitbox da original)
+                if (SetaVis := PropSetaVisual?):
+                    if (SetaVis.TeleportTo[Pos, Rot]) {}
+                else:
+                    # Fallback se nao tiver skin spawnada
+                    if (SetaDeMira.TeleportTo[Pos, Rot]) {}
 
                 if (BV := BolaNaBoca?):
                      PosB := Pos + (Rot.GetLocalForward()*OffsetDaBoca.X) + (Rot.GetLocalUp()*OffsetDaBoca.Z) + (Rot.GetLocalRight()*OffsetDaBoca.Y)
@@ -782,6 +961,12 @@ zumba_advanced_manager := class(creative_device):
             if (EhAutomatico?):
                 set NivelDoCombo += 1
                 Print("CHAIN REACTION! Level {NivelDoCombo}")
+
+            # Pontuação e Moedas
+            PontosGanhos := Contagem * 10 * (NivelDoCombo + 1)
+            set PontosDoJogador += PontosGanhos
+            Print("Ganhou {PontosGanhos} moedas!")
+            AtualizarHUD()
 
             # XP via Lista de Accolades (Progressivo)
             if (P := GetPlayspace().GetPlayers()[0]):
